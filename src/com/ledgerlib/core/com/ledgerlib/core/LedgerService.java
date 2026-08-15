@@ -1,8 +1,7 @@
 package com.ledgerlib.core;
 
 import java.math.BigDecimal;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class LedgerService {
@@ -19,6 +18,45 @@ public class LedgerService {
                       return entry.side() == EntrySide.CREDIT ? amount : amount.negate();
                     },
                     BigDecimal::add)));
+  }
+
+  public static List<Map.Entry<AccountId, BigDecimal>> getTopNAccounts(
+      List<Transaction> transactions, int n) {
+    Map<AccountId, BigDecimal> turnOverMap =
+        transactions.stream()
+            .flatMap(tx -> tx.entries().stream())
+            .collect(
+                Collectors.groupingBy(
+                    Entry::account,
+                    Collectors.reducing(
+                        BigDecimal.ZERO, entry -> entry.amount().amount().abs(), BigDecimal::add)));
+
+    return turnOverMap.entrySet().stream()
+        .sorted(Map.Entry.<AccountId, BigDecimal>comparingByValue().reversed())
+        .limit(n)
+        .collect(Collectors.toList());
+  }
+
+  public static Set<Currency> getDistinctCurrency(List<Transaction> transactions) {
+    return transactions.stream()
+        .flatMap(tx -> tx.entries().stream())
+        .map(entry -> entry.amount().currency())
+        .collect(Collectors.toSet());
+  }
+
+  public static List<Transaction> filterTransactionByThreshold(
+      List<Transaction> transactions, BigDecimal threshold) {
+    return transactions.stream()
+        .filter(
+            tx -> {
+              BigDecimal total =
+                  tx.entries().stream()
+                      .map(entry -> entry.amount().amount().abs())
+                      .reduce(BigDecimal.ZERO, BigDecimal::add);
+              return total.compareTo(threshold) > 0;
+            })
+        .sorted(Comparator.comparing(Transaction::timestamp))
+        .collect(Collectors.toList());
   }
 
   public static void main(String[] args) {
